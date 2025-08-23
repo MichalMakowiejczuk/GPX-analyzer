@@ -31,7 +31,7 @@ with st.sidebar:
     max_tolerant_drop_len = st.number_input("Maksymalna długość zjazdu podczas podjazdu [km]", min_value=0, max_value=1000, value=100, step=50)
     st.markdown("---")
     st.subheader("Przedziały nachylenia (dla tabeli)")
-    slope_thresholds_str = st.text_input("Progi (w %), rozdzielone przecinkami", value="2,4,5,8")
+    slope_thresholds_str = st.text_input("Progi (w %), rozdzielone przecinkami", value="2,4,6,8")
     try:
         slope_thresholds = tuple(float(x.strip()) for x in slope_thresholds_str.split(",") if x.strip() != "")
     except Exception:
@@ -51,19 +51,20 @@ if uploaded_file is None:
 # =====================
 parser = GPXParser(uploaded_file.read())
 track_df = parser.parse_to_dataframe()
+main_profile = ElevationProfile(track_df, seg_unit_km=0.2, smooth_window=smooth_window)
 
 total_distance_km = float(track_df["km"].max())
-total_ascent_m = float(parser.get_total_ascent(smooth_window=smooth_window))
-total_descent_m = float(parser.get_total_descent(smooth_window=smooth_window))
+total_ascent_m = float(main_profile.get_total_ascent())
+total_descent_m = float(main_profile.get_total_descent())
+highest_point_m = float(main_profile.get_highest_point())
+lowest_point_m = float(main_profile.get_lowest_point())
 
 # =====================
 # Analiza profilu głównego
 # =====================
-main_profile = ElevationProfile(track_df, seg_unit_km=0.2)
 main_profile_plot, ax = main_profile.plot(
     show_labels=False,
     show_background=True,
-    smooth_window=smooth_window,
     slope_thresholds=slope_thresholds
 )
 
@@ -73,24 +74,22 @@ main_profile_plot, ax = main_profile.plot(
 climbs_df = main_profile.detect_climbs(
     min_length_m=min_length,
     min_gain_m=min_gain,
-    smooth_window=smooth_window,
     min_avg_slope=min_avg_slope,
     max_tolerant_drop_len=max_tolerant_drop_len,
     max_tolerant_drop_slope=12.0  # deafault value
 )
-climbs_df.index = np.arange(1, len(climbs_df) + 1)
-climbs_df['start_km'] = climbs_df['start_km'].round(2)
-climbs_df['end_km'] = climbs_df['end_km'].round(2)
-climbs_df['start-end km'] = climbs_df["start_km"].astype(str).str.cat(climbs_df["end_km"].astype(str), sep=" - ") + " km"
-climbs_df['Difficulty score'] = climbs_df.apply(lambda row: classify_climb_difficulty(row.length_m, row.avg_grade_pct)[1], axis=1)
-climbs_df['Difficulty category'] = climbs_df.apply(lambda row: classify_climb_difficulty(row.length_m, row.avg_grade_pct)[0], axis=1)
-
 base_map = build_base_map_with_detected_climbs(track_df, climbs_df)
 
-if climbs_df.empty != True:
+if not climbs_df.empty:
+    climbs_df.index = np.arange(1, len(climbs_df) + 1)
+    climbs_df['start_km'] = climbs_df['start_km'].round(2)
+    climbs_df['end_km'] = climbs_df['end_km'].round(2)
+    climbs_df['start-end km'] = climbs_df["start_km"].astype(str).str.cat(climbs_df["end_km"].astype(str), sep=" - ") + " km"
+    climbs_df['Difficulty score'] = climbs_df.apply(lambda row: classify_climb_difficulty(row.length_m, row.avg_grade_pct)[1], axis=1)
+    climbs_df['Difficulty category'] = climbs_df.apply(lambda row: classify_climb_difficulty(row.length_m, row.avg_grade_pct)[0], axis=1)
     for number, row in climbs_df.iterrows():
         popup_text = (
-            f"Podjazd {number + 1}<br>"
+            f"Podjazd {number}<br>"
             f"Długość: {row['length_m']} m<br>"
             f"Wznios: +{row['gain_m']} m<br>"
             f"Śr. nachylenie: {row['avg_grade_pct']}%"
@@ -102,7 +101,7 @@ if climbs_df.empty != True:
         ).add_to(base_map)
         folium.Marker(
             [row["end_lat"], row["end_lon"]],
-            popup=f"Koniec podjazdu {number + 1}",
+            popup=f"Koniec podjazdu {number}",
             icon=folium.Icon(color="blue", icon="flag")
         ).add_to(base_map)
 
@@ -115,6 +114,8 @@ with col1:
     st.metric("Długość trasy", f"{total_distance_km:.2f} km")
     st.metric("Całkowite przewyższenie", f"{total_ascent_m:.0f} m")
     st.metric("Całkowity zjazd", f"{total_descent_m:.0f} m")
+    st.metric("Najwyższy punkt", f"{highest_point_m:.0f} m n.p.m.")
+    st.metric("Najniższy punkt", f"{lowest_point_m:.0f} m n.p.m.")
 with col2:
     map_html = base_map.get_root().render()
     components.html(map_html, height=550, width= 2000)
@@ -129,12 +130,10 @@ with st.expander("Główny profil wysokościowy", expanded=True):
 # Tabela długości wg przedziałów nachylenia
 # =====================
 slope_df = main_profile.compute_slope_lengths(
-    smooth_window=smooth_window,
     slope_thresholds=slope_thresholds
 )
 
 uphill_downhill = main_profile.compute_slope_lengths(
-    smooth_window=smooth_window,
     slope_thresholds=(-2, 2))
 
 uphill_downhill.loc[:, 'slope_range'] = ['Downhill (< -2%)', 'Flat', 'Uphill (> 2%)'] 
@@ -188,12 +187,12 @@ else:
                 else:
                     climb_df = climb_df.copy()
                     climb_df["km"] -= climb_df["km"].iloc[0]
-                    climb_profile = ElevationProfile(climb_df, seg_unit_km=0.1)
+                    climb_profile = ElevationProfile(climb_df, seg_unit_km=0.1, smooth_window=smooth_window)
                     fig_c, ax_c = climb_profile.plot(
                         show_labels=False,
                         show_background=False,
-                        smooth_window=smooth_window,
-                        slope_thresholds=slope_thresholds
+                        slope_thresholds=slope_thresholds,
+                        slope_type="datapoint"
                     )
                     ax_c.set_ylim(climb_df["elevation"].min(), climb_df["elevation"].max())
 

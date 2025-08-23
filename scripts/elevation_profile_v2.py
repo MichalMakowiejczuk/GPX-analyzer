@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from geopy.geocoders import Nominatim
 from geopy.exc import GeocoderTimedOut, GeocoderUnavailable
+from scipy.signal import savgol_filter
 
 
 class ElevationProfile:
@@ -34,61 +35,70 @@ class ElevationProfile:
         self.track_df = track_df.copy()
         self.seg_unit_km = seg_unit_km
         self.smooth_window = smooth_window
-        self.track_df["elev_smooth"] = self._smooth_profile(self.smooth_window)
+        self._smooth_profile(self.smooth_window, )
         self._assign_segments()
-        self._compute_slopes()
-        self._compute_slope_for_each_datapoint_raw()
+        self._compute_slope_for_each_datapoint()
+        self._compute_slopes_for_segments()
         self.places_df = None
 
     # ========================
     # Metody prywatne
     # ========================
-
     def _assign_segments(self) -> None:
         """Przypisuje numer segmentu na podstawie odległości i jednostki segmentacji."""
         self.track_df["segment"] = np.floor(self.track_df["km"] / self.seg_unit_km).astype(int)
 
-    def _smooth_profile(self, smooth_window=5):
-        """Zwraca wygładzony profil wysokościowy."""
-        return self.track_df['elevation'].rolling(window=smooth_window, center=True, min_periods=1).mean()
-    
-    def _compute_slopes(self) -> None:
-        """Oblicza średnie nachylenie dla każdego segmentu."""
-        slopes_df = (
-            self.track_df.groupby("segment")
-            .agg(
-                start_km=("km", "first"),
-                end_km=("km", "last"),
-                start_elev=("elev_smooth", "first"),
-                end_elev=("elev_smooth", "last"),
-            )
-            .assign(
-                slope=lambda df: np.where(
-                    df["end_km"] == df["start_km"], 0,
-                    (df["end_elev"] - df["start_elev"]) /
-                    ((df["end_km"] - df["start_km"]) * 1000) * 100
-                )
-            )
-            .reset_index()[["segment", "slope"]]
+    def _smooth_profile(self, median_window=5, savgol_window=5, poly_order=2):
+        """
+        Wygładza profil wysokościowy używając kombinacji filtra medianowego i Savitzky-Golay.
+        
+        Parametry:
+        ----------
+        median_window : int
+            Okno filtra medianowego (usuwa skoki/outliery). Powinno być nieparzyste.
+        savgol_window : int
+            Okno filtra Savitzky-Golay (wygładza krzywą). Musi być nieparzyste.
+        poly_order : int
+            Rząd wielomianu dla Savitzky-Golay.
+        """
+        median_smoothed = self.track_df['elevation'].rolling(
+            window=median_window, center=True, min_periods=1
+        ).median()
+
+        self.track_df['elev_smooth'] = savgol_filter(
+            median_smoothed, window_length=savgol_window, polyorder=poly_order
         )
-        self.track_df = self.track_df.merge(slopes_df, on="segment", how="left")
     
-    def _compute_slope_for_each_datapoint_raw(self, min_dist_m: float = 12) -> None:
-        """Oblicza nachylenie dla każdego punktu na podstawie różnicy wysokości i odległości,
-        filtrując bardzo krótkie odcinki, aby uniknąć ekstremalnych wartości."""
+    def _compute_slope_for_each_datapoint(self, min_dist_m: float = 7) -> None:
+        """
+        Oblicza nachylenie dla każdego punktu na podstawie różnicy wysokości i odległości,
+        filtrując bardzo krótkie odcinki, ale wypełniając je nachyleniem sąsiednich punktów.
+        """
         df = self.track_df.copy()
 
-        # różnice między punktami (używamy wygładzonej wysokości)
         df['delta_elev'] = df['elev_smooth'].diff()
-        df['delta_dist'] = df['km'].diff() * 1000  # km → metry
+        df['delta_dist'] = df['km'].diff() * 1000  # km → m
 
-        # nachylenie w procentach, odfiltrowanie krótkich odcinków
-        df['slope_percent'] = np.where(
-            df['delta_dist'] < min_dist_m, 0,
-            (df['delta_elev'] / df['delta_dist']) * 100
+        # Obliczamy nachylenie punktowe
+        slope = (df['delta_elev'] / df['delta_dist']) * 100
+
+        # Zastępujemy wartości dla krótkich odcinków
+        short_mask = df['delta_dist'] < min_dist_m
+        slope[short_mask] = np.nan
+
+        # Wypełnienie braków np. metodą 'ffill' (wartość poprzedniego punktu) lub 'bfill'
+        slope = slope.fillna(method='ffill').fillna(method='bfill')
+
+        self.track_df['datapoint_slope'] = slope
+
+    def _compute_slopes_for_segments(self) -> None:
+        """Oblicza średnie nachylenie dla każdego segmentu na podstawie nachylenia punktowego."""
+        slopes_df = (
+            self.track_df.groupby("segment")
+            .agg(segment_slope=('datapoint_slope', 'mean'))
+            .reset_index()
         )
-
-        self.track_df['slope_for_each_datapoint'] = df['slope_percent']
+        self.track_df = self.track_df.merge(slopes_df, on="segment", how="left")
 
     def _load_cache(self, cache_file: str) -> dict:
         """Ładuje cache miejscowości z pliku JSON."""
@@ -155,12 +165,11 @@ class ElevationProfile:
         self.places_df = pd.DataFrame(places, columns=["segment", "place", "elevation", "km", "group"])
         self.places_df = self.places_df.drop_duplicates(subset=["place"]).sort_values(["group", "km"])
 
-    def compute_slope_lengths(self, smooth_window=5, slope_thresholds=(2, 4, 6, 8), min_delta_km=1e-4):
+    def compute_slope_lengths(self, slope_thresholds=(2, 4, 6, 8), min_delta_km=1e-4):
         """
         Oblicza długość odcinków w zadanych zakresach nachylenia.
         """
         df = self.track_df.copy()
-        df['elev_smooth'] = self._smooth_profile(smooth_window)
         df['delta_elev'] = df['elev_smooth'].diff()
         df['delta_km'] = df['km'].diff()
 
@@ -193,10 +202,10 @@ class ElevationProfile:
         background_color="gray",
         background_shift_km=0.5,
         background_shift_elev=15,
-        smooth_window=5,
         slope_thresholds=(2, 4, 6, 8),
         slope_colors=("lightgreen", "yellow", "orange", "orangered", "maroon"),
-        slope_labels=None
+        slope_labels=None,
+        slope_type="segment"  # "segment" lub "datapoint"
     ):
         """
         Rysuje profil wysokości z kolorami nachylenia.
@@ -212,20 +221,23 @@ class ElevationProfile:
         ax.set_ylabel("Elevation [m]")
         ax.spines[["right", "top"]].set_visible(False)
 
-        elevation_smooth = self._smooth_profile(smooth_window)
-
         if show_background:
             ax.fill_between(
                 self.track_df["km"] + background_shift_km,
-                elevation_smooth + background_shift_elev,
+                self.track_df['elev_smooth'] + background_shift_elev,
                 color=background_color,
                 zorder=0,
             )
 
         legend = []
         for i, color in enumerate(slope_colors):
-            mask = (self.track_df["slope"] >= thresholds[i]) & (self.track_df["slope"] < thresholds[i + 1])
-            ax.fill_between(self.track_df["km"], elevation_smooth, where=mask, color=color, zorder=1, interpolate=True)
+            if slope_type == "segment":
+                mask = (self.track_df["segment_slope"] >= thresholds[i]) & (self.track_df["segment_slope"] < thresholds[i + 1])
+            elif slope_type == "datapoint":
+                mask = (self.track_df["datapoint_slope"] >= thresholds[i]) & (self.track_df["datapoint_slope"] < thresholds[i + 1])
+            else:
+                raise ValueError("slope_type musi być 'segment' lub 'datapoint'.")
+            ax.fill_between(self.track_df["km"], self.track_df['elev_smooth'], where=mask, color=color, zorder=1, interpolate=True)
             legend.append(mpatches.Patch(color=color, label=slope_labels[i]))
 
         if show_labels and self.places_df is not None:
@@ -245,7 +257,7 @@ class ElevationProfile:
                     )
                     last_label_km = row["km"]
 
-        ax.plot(self.track_df["km"], elevation_smooth, color="darkgrey", linewidth=0.15)
+        ax.plot(self.track_df["km"], self.track_df['elev_smooth'], color="darkgrey", linewidth=0.15)
         y_lower_bound = math.floor(self.track_df["elevation"].min() * 0.8 / 100) *100
         ax.set_ylim(y_lower_bound, self.track_df["elevation"].max() * 1.1)
         ax.set_xlim(self.track_df["km"].min(), self.track_df["km"].max())
@@ -256,7 +268,6 @@ class ElevationProfile:
     def detect_climbs(self, 
                   min_length_m=500, 
                   min_gain_m=30, 
-                  smooth_window=5, 
                   min_avg_slope=2.0,
                   max_tolerant_drop_len=500,     # m - maks. długość tolerowanego spadku
                   max_tolerant_drop_slope=12.0):  # % - maks. nachylenie tolerowanego spadku
@@ -266,7 +277,6 @@ class ElevationProfile:
         """
 
         df = self.track_df.copy()
-        df['elev_smooth'] = self._smooth_profile(smooth_window)
 
         climbs = []
         in_climb = False
@@ -324,7 +334,7 @@ class ElevationProfile:
                                 "length_m": round(length_m, 1),
                                 "gain_m": round(gain, 1),
                                 "avg_grade_pct": round(avg_slope, 1),
-                                "max_grade_pct": round(max(df.loc[start_idx:end_idx, 'slope_for_each_datapoint']), 1),
+                                "max_grade_pct": round(max(df.loc[start_idx:end_idx, 'datapoint_slope']), 1),
                                 "start_lat": start_row["latitude"],
                                 "start_lon": start_row["longitude"],
                                 "end_lat": end_row["latitude"],
@@ -360,7 +370,7 @@ class ElevationProfile:
                     "length_m": round(length_m, 1),
                     "gain_m": round(gain, 1),
                     "avg_grade_pct": round(avg_slope, 1),
-                    "max_grade_pct": round(max(df.loc[start_idx:end_idx, 'slope_for_each_datapoint']), 1),
+                    "max_grade_pct": round(max(df.loc[start_idx:end_idx, 'datapoint_slope']), 1),
                     "start_lat": start_row["latitude"],
                     "start_lon": start_row["longitude"],
                     "end_lat": end_row["latitude"],
@@ -369,7 +379,25 @@ class ElevationProfile:
 
         return pd.DataFrame(climbs)
 
-
+    def get_total_ascent(self):
+        """Całkowite przewyższenie"""
+        elevation_diff = self.track_df["elev_smooth"].diff()
+        total_ascent = elevation_diff[elevation_diff > 0].sum()
+        return total_ascent
+    
+    def get_total_descent(self):
+        """Całkowite zjazd"""
+        elevation_diff = self.track_df["elev_smooth"].diff()
+        total_descent = -elevation_diff[elevation_diff < 0].sum()
+        return total_descent
+    
+    def get_highest_point(self):
+        """Najwyższy punkt trasy"""
+        return self.track_df["elev_smooth"].max()
+    
+    def get_lowest_point(self):
+        """Najniższy punkt trasy"""
+        return self.track_df["elev_smooth"].min()
 
 
 

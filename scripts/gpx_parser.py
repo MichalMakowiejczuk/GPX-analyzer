@@ -1,4 +1,3 @@
-# gpx_parser.py
 import gpxpy
 import pandas as pd
 from geopy.distance import geodesic
@@ -54,23 +53,3 @@ class GPXParser:
         if self.track_df.empty:
             raise ValueError("Brak punktów w ścieżce GPX.")
         return self.track_df
-    
-    def get_total_ascent(self, smooth_window=5):
-        """Całkowite przewyższenie"""
-        if self.track_df is None:
-            raise ValueError("Brak danych – najpierw uruchom parse_to_dataframe().")
-
-        smoothed = self.track_df["elevation"].rolling(window=smooth_window, center=True, min_periods=1).mean()
-        elevation_diff = smoothed.diff()
-        total_ascent = elevation_diff[elevation_diff > 0].sum()
-        return total_ascent
-    
-    def get_total_descent(self, smooth_window=5):
-        """Całkowite zjazd"""
-        if self.track_df is None:
-            raise ValueError("Brak danych – najpierw uruchom parse_to_dataframe().")
-
-        smoothed = self.track_df["elevation"].rolling(window=smooth_window, center=True, min_periods=1).mean()
-        elevation_diff = smoothed.diff()
-        total_descent = -elevation_diff[elevation_diff < 0].sum()
-        return total_descent
