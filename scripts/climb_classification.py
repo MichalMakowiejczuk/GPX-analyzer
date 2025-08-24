@@ -1,5 +1,3 @@
-
-
 def classify_climb_difficulty(dl_km, gradient):
     """ Calculates the difficulty score of a climb based on its length and gradient (just like strava: https://support.strava.com/hc/en-us/articles/216917057-Climb-Categorization).
     Args:
@@ -32,5 +30,5 @@ if __name__ == "__main__":
     length = 2.3  # in m
     gradient = 4.1  # in percent
 
-    category, score = classify_ascent_difficulty(length, gradient)
+    category, score = classify_climb_difficulty(length, gradient)
     print(f"Category: {category}, Score: {score:.2f}")

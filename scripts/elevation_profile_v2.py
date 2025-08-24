@@ -48,27 +48,32 @@ class ElevationProfile:
         """Przypisuje numer segmentu na podstawie odległości i jednostki segmentacji."""
         self.track_df["segment"] = np.floor(self.track_df["km"] / self.seg_unit_km).astype(int)
 
-    def _smooth_profile(self, median_window=5, savgol_window=5, poly_order=2):
+    def _smooth_profile(self, median_window=5, savgol_window=5, poly_order=2, min_distance_m=1.0):
         """
-        Wygładza profil wysokościowy używając kombinacji filtra medianowego i Savitzky-Golay.
+        Clean and smooth elevation profile:
+        1. Remove near-duplicate points (< min_distance_m)
+        2. Median filter to remove outliers
+        3. Savitzky-Golay smoothing
+        """
         
-        Parametry:
-        ----------
-        median_window : int
-            Okno filtra medianowego (usuwa skoki/outliery). Powinno być nieparzyste.
-        savgol_window : int
-            Okno filtra Savitzky-Golay (wygładza krzywą). Musi być nieparzyste.
-        poly_order : int
-            Rząd wielomianu dla Savitzky-Golay.
-        """
-        median_smoothed = self.track_df['elevation'].rolling(
+        # Step 1: Remove near duplicates based on km diff
+        min_km = min_distance_m / 1000.0
+        self.track_df['km_diff'] = self.track_df['km'].diff() # large value for first point - prevent removal
+        self.track_df = self.track_df[self.track_df['km_diff'] >= min_km].reset_index(drop=True)
+
+        elev_cleaned = self.track_df['elevation'].values
+
+        # Step 2: Median filter
+        median_smoothed = pd.Series(elev_cleaned).rolling(
             window=median_window, center=True, min_periods=1
         ).median()
 
+        # Step 3: Savitzky-Golay smoothing
         self.track_df['elev_smooth'] = savgol_filter(
             median_smoothed, window_length=savgol_window, polyorder=poly_order
         )
-    
+
+
     def _compute_slope_for_each_datapoint(self, min_dist_m: float = 7) -> None:
         """
         Oblicza nachylenie dla każdego punktu na podstawie różnicy wysokości i odległości,
@@ -265,120 +270,6 @@ class ElevationProfile:
 
         return fig, ax
     
-    def detect_climbs(self, 
-                  min_length_m=500, 
-                  min_gain_m=30, 
-                  min_avg_slope=2.0,
-                  max_tolerant_drop_len=500,     # m - maks. długość tolerowanego spadku
-                  max_tolerant_drop_slope=12.0):  # % - maks. nachylenie tolerowanego spadku
-        """
-        Wykrywa podjazdy spełniające kryteria, z tolerancją na krótkie, łagodne spadki w środku.
-        Na końcu odcina końcowy zjazd, jeśli po nim nie ma już podjazdu.
-        """
-
-        df = self.track_df.copy()
-
-        climbs = []
-        in_climb = False
-        start_idx = None
-        gain = 0.0  # suma dodatnich przyrostów wysokości
-
-        # Bufor aktualnego spadku
-        drop_len = 0.0
-        drop_gain_loss = 0.0
-        last_up_idx = None  # indeks ostatniego punktu „w górę”
-
-        for i in range(1, len(df)):
-            delta_h = df.loc[i, 'elev_smooth'] - df.loc[i-1, 'elev_smooth']
-            delta_d = (df.loc[i, 'km'] - df.loc[i-1, 'km']) * 1000  # m
-
-            if delta_h > 0:  # odcinek w górę
-                if not in_climb:
-                    in_climb = True
-                    start_idx = i-1
-                    gain = 0.0
-                    drop_len = 0.0
-                    drop_gain_loss = 0.0
-
-                gain += delta_h
-                # reset bufora spadku
-                drop_len = 0.0
-                drop_gain_loss = 0.0
-                last_up_idx = i
-
-            else:  # spadek lub płasko
-                if in_climb:
-                    drop_len += delta_d
-                    drop_gain_loss += delta_h  # ujemne lub zero
-
-                    drop_slope = abs(drop_gain_loss / drop_len * 100) if drop_len > 0 else 0.0
-
-                    if drop_len <= max_tolerant_drop_len and drop_slope <= max_tolerant_drop_slope:
-                        # tolerujemy spadek w środku
-                        continue
-                    else:
-                        # koniec podjazdu — odcinamy końcowy spadek
-                        end_idx = last_up_idx if last_up_idx is not None else i-1
-
-                        start_row = df.loc[start_idx]
-                        end_row = df.loc[end_idx]
-                        length_m = (end_row["km"] - start_row["km"]) * 1000
-                        avg_slope = (gain / length_m * 100) if length_m > 0 else 0.0
-
-                        if length_m >= min_length_m and gain >= min_gain_m and avg_slope >= min_avg_slope:
-                            climbs.append({
-                                "start_idx": start_idx,
-                                "end_idx": end_idx,
-                                "start_km": start_row["km"],
-                                "end_km": end_row["km"],
-                                "length_m": round(length_m, 1),
-                                "gain_m": round(gain, 1),
-                                "avg_grade_pct": round(avg_slope, 1),
-                                "max_grade_pct": round(max(df.loc[start_idx:end_idx, 'datapoint_slope']), 1),
-                                "start_lat": start_row["latitude"],
-                                "start_lon": start_row["longitude"],
-                                "end_lat": end_row["latitude"],
-                                "end_lon": end_row["longitude"]
-                            })
-
-                        # reset stanu
-                        in_climb = False
-                        start_idx = None
-                        gain = 0.0
-                        drop_len = 0.0
-                        drop_gain_loss = 0.0
-                        last_up_idx = None
-
-        # Obsługa końca trasy
-        if in_climb:
-            if drop_len > 0 and last_up_idx is not None:
-                end_idx = last_up_idx  # ucinamy końcowy spadek
-            else:
-                end_idx = len(df) - 1
-
-            start_row = df.loc[start_idx]
-            end_row = df.loc[end_idx]
-            length_m = (end_row["km"] - start_row["km"]) * 1000
-            avg_slope = (gain / length_m * 100) if length_m > 0 else 0.0
-
-            if length_m >= min_length_m and gain >= min_gain_m and avg_slope >= min_avg_slope:
-                climbs.append({
-                    "start_idx": start_idx,
-                    "end_idx": end_idx,
-                    "start_km": start_row["km"],
-                    "end_km": end_row["km"],
-                    "length_m": round(length_m, 1),
-                    "gain_m": round(gain, 1),
-                    "avg_grade_pct": round(avg_slope, 1),
-                    "max_grade_pct": round(max(df.loc[start_idx:end_idx, 'datapoint_slope']), 1),
-                    "start_lat": start_row["latitude"],
-                    "start_lon": start_row["longitude"],
-                    "end_lat": end_row["latitude"],
-                    "end_lon": end_row["longitude"]
-                })
-
-        return pd.DataFrame(climbs)
-
     def get_total_ascent(self):
         """Całkowite przewyższenie"""
         elevation_diff = self.track_df["elev_smooth"].diff()
@@ -398,7 +289,103 @@ class ElevationProfile:
     def get_lowest_point(self):
         """Najniższy punkt trasy"""
         return self.track_df["elev_smooth"].min()
+    
+    def get_track_df(self):
+        """Zwraca DataFrame trasy z dodatkowymi kolumnami: ['elev_smooth', 'datapoint_slope', 'segment', 'segment_slope']"""
+        return self.track_df.copy()
 
+    def detect_climbs(self,
+                        min_length_m=500,
+                        min_gain_m=30,
+                        min_avg_slope=2.0,
+                        window_m=200,
+                        merge_gap_m=100):
+        """
+        Wykrywa podjazdy za pomocą okna przesuwnego i inteligentnego scalania.
+        
+        Parametry:
+        ----------
+        min_length_m : float
+            Minimalna długość podjazdu (m).
+        min_gain_m : float
+            Minimalny wznios (m).
+        min_avg_slope : float
+            Minimalne średnie nachylenie (%).
+        window_m : float
+            Szerokość okna (m) do obliczania średniego nachylenia.
+        merge_gap_m : float
+            Maksymalna przerwa (m) pomiędzy podjazdami do scalenia.
+        """
+
+        df = self.track_df.copy()
+        dist = df['km'].values * 1000
+        elev = df['elev_smooth'].values
+        slopes = df['datapoint_slope'].values
+
+        # ===== 1. Sliding Window Avg Slope =====
+        window_pts = max(2, int(window_m / np.mean(np.diff(dist))))  # approx points in window
+        rolling_gain = np.convolve(np.r_[0, np.diff(elev)], np.ones(window_pts), mode='same')
+        rolling_dist = np.convolve(np.r_[0, np.diff(dist)], np.ones(window_pts), mode='same')
+        rolling_slope = (rolling_gain / rolling_dist) * 100
+        rolling_slope[np.isnan(rolling_slope)] = 0
+
+        # ===== 2. Identify Candidate Regions =====
+        is_uphill = rolling_slope > (min_avg_slope / 2)  # softer threshold for detection
+        regions = []
+        start_idx = None
+
+        for i in range(len(is_uphill)):
+            if is_uphill[i] and start_idx is None:
+                start_idx = i
+            elif not is_uphill[i] and start_idx is not None:
+                end_idx = i
+                if end_idx - start_idx > 1:
+                    regions.append((start_idx, end_idx))
+                start_idx = None
+        if start_idx is not None:
+            regions.append((start_idx, len(is_uphill)-1))
+
+        # ===== 3. Merge Adjacent Regions =====
+        merged = []
+        for seg in regions:
+            if not merged:
+                merged.append(seg)
+            else:
+                prev_start, prev_end = merged[-1]
+                if (dist[seg[0]] - dist[prev_end]) <= merge_gap_m:
+                    merged[-1] = (prev_start, seg[1])
+                else:
+                    merged.append(seg)
+
+        # ===== 4. Validate and Build Climbs =====
+        climbs = []
+        for (s, e) in merged:
+            start_row = df.iloc[s]
+            end_row = df.iloc[e]
+            length_m = (end_row['km'] - start_row['km']) * 1000
+            gain_m = elev[e] - elev[s]
+            if length_m < min_length_m or gain_m < min_gain_m:
+                continue
+            avg_slope = (gain_m / length_m) * 100
+            if avg_slope < min_avg_slope:
+                continue
+
+            climbs.append({
+                "start_idx": s,
+                "end_idx": e,
+                "start_km": start_row["km"],
+                "end_km": end_row["km"],
+                "length_m": round(length_m, 1),
+                "gain_m": round(gain_m, 1),
+                "avg_grade_pct": round(avg_slope, 1),
+                "max_grade_pct": round(np.max(slopes[s:e+1]), 1),
+                "start_lat": start_row["latitude"],
+                "start_lon": start_row["longitude"],
+                "end_lat": end_row["latitude"],
+                "end_lon": end_row["longitude"]
+            })
+
+        return pd.DataFrame(climbs)
 
 
 if __name__ == "__main__":

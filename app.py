@@ -27,8 +27,8 @@ with st.sidebar:
     st.subheader("Wykrywanie podjazdów")
     min_length = st.number_input("Minimalna długość podjazdu [m]", min_value=100, max_value=20000, value=500, step=100)
     min_gain = st.number_input("Minimalny wznios [m]", min_value=10, max_value=2000, value=30, step=10)
-    min_avg_slope = st.number_input("Minimalne średnie nachylenie (%)", min_value=1.0, max_value=15.0, value=2.0, step=0.5)
-    max_tolerant_drop_len = st.number_input("Maksymalna długość zjazdu podczas podjazdu [km]", min_value=0, max_value=1000, value=100, step=50)
+    min_avg_slope = st.number_input("Minimalne średnie nachylenie (%)", min_value=2.0, max_value=15.0, value=2.0, step=0.5)
+    merge_gap_m = st.number_input("Maksymalna długość zjazdu podczas podjazdu [km]", min_value=0, max_value=1000, value=100, step=50)
     st.markdown("---")
     st.subheader("Przedziały nachylenia (dla tabeli)")
     slope_thresholds_str = st.text_input("Progi (w %), rozdzielone przecinkami", value="2,4,6,8")
@@ -52,6 +52,7 @@ if uploaded_file is None:
 parser = GPXParser(uploaded_file.read())
 track_df = parser.parse_to_dataframe()
 main_profile = ElevationProfile(track_df, seg_unit_km=0.2, smooth_window=smooth_window)
+track_df = main_profile.get_track_df()
 
 total_distance_km = float(track_df["km"].max())
 total_ascent_m = float(main_profile.get_total_ascent())
@@ -75,8 +76,7 @@ climbs_df = main_profile.detect_climbs(
     min_length_m=min_length,
     min_gain_m=min_gain,
     min_avg_slope=min_avg_slope,
-    max_tolerant_drop_len=max_tolerant_drop_len,
-    max_tolerant_drop_slope=12.0  # deafault value
+    merge_gap_m=merge_gap_m,
 )
 base_map = build_base_map_with_detected_climbs(track_df, climbs_df)
 
@@ -101,7 +101,7 @@ if not climbs_df.empty:
         ).add_to(base_map)
         folium.Marker(
             [row["end_lat"], row["end_lon"]],
-            popup=f"Koniec podjazdu {number}",
+            popup=folium.Popup(f"Koniec<br> podjazdu: {number}", max_width=250),
             icon=folium.Icon(color="blue", icon="flag")
         ).add_to(base_map)
 
