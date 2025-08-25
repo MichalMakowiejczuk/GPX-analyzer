@@ -110,27 +110,26 @@ class SlopeAnalyzer:
 
     def __init__(self, track_df: pd.DataFrame) -> None:
         self.df = track_df.copy()
-        self._compute_datapoint_slopes()
-        self._compute_segment_slopes()
+        self._compute_slopes()
 
-    def _compute_datapoint_slopes(self) -> None:
+    def _compute_slopes(self) -> None:
         df = self.df
+        df["delta_km"] = df["km"].diff()
         df["delta_elev"] = df["elev_smooth"].diff()
-        df["delta_dist_m"] = df["km"].diff() * 1000.0
-        df["datapoint_slope"] = (df["delta_elev"] / df["delta_dist_m"]) * 100.0
-
-    def _compute_segment_slopes(self) -> None:
-        slopes = self.df.groupby("segment")["datapoint_slope"].mean().rename("segment_slope")
-        self.df = self.df.join(slopes, on="segment")
+        df["delta_dist_m"] = df["delta_km"] * 1000.0
+        df["slope_pct"] = (df["delta_elev"] / df["delta_dist_m"]) * 100.0
+        # slope na poziomie punktu (tak jak miałeś)
+        df["datapoint_slope"] = df["slope_pct"]
+        # slope uśredniony na segment
+        df["segment_slope"] = df.groupby("segment")["slope_pct"].transform("mean")
+        self.df = df
 
     # ----- Aggregate stats -----
     def get_total_ascent(self) -> float:
-        diff = self.df["elev_smooth"].diff()
-        return float(diff[diff > 0].sum())
+        return float(self.df["delta_elev"].clip(lower=0).sum())
 
     def get_total_descent(self) -> float:
-        diff = self.df["elev_smooth"].diff()
-        return float(-diff[diff < 0].sum())
+        return float(-self.df["delta_elev"].clip(upper=0).sum())
 
     def get_highest_point(self) -> float:
         return float(self.df["elev_smooth"].max())
@@ -143,32 +142,22 @@ class SlopeAnalyzer:
         slope_thresholds: Tuple[float, ...] = (2, 4, 6, 8),
         min_delta_km: float = 1e-4,
     ) -> pd.DataFrame:
-        """Compute total distance covered in slope ranges."""
-        df = self.df.copy()
-        df["delta_elev"] = df["elev_smooth"].diff()
-        df["delta_km"] = df["km"].diff()
-        df = df.dropna(subset=["delta_elev", "delta_km"])  # type: ignore[arg-type]
+        df = self.df.dropna(subset=["delta_km", "delta_elev"]).copy()
         df = df[df["delta_km"] > min_delta_km]
-        df["slope"] = (df["delta_elev"] / (df["delta_km"] * 1000.0)) * 100.0
-        df["segment_length_km"] = df["delta_km"]
 
         thresholds, labels = _get_slope_bins(slope_thresholds)
-        df["slope_range"] = pd.cut(df["slope"], bins=thresholds, labels=labels, right=True)
+        df["slope_range"] = pd.cut(df["slope_pct"], bins=thresholds, labels=labels, right=True)
 
         result = (
-            df.groupby("slope_range")["segment_length_km"].sum().reset_index().rename(
-                columns={"segment_length_km": "length_km"}
-            )
+            df.groupby("slope_range")["delta_km"]
+            .sum()
+            .reset_index()
+            .rename(columns={"delta_km": "length_km"})
         )
         total = result["length_km"].sum()
-        out = pd.DataFrame(
-            {
-                "slope_range": result["slope_range"],
-                "length_km": result["length_km"].round(2),
-                "% of total": (result["length_km"] / total * 100.0).round(2) if total else 0,
-            }
-        )
-        return out
+        result["length_km"] = result["length_km"].round(2)
+        result["% of total"] = (result["length_km"] / total * 100).round(2) if total else 0
+        return result
 
 
 # ========================
@@ -189,24 +178,26 @@ class ClimbDetector:
         window_m: float = 200,
         merge_gap_m: float = 100,
     ) -> pd.DataFrame:
-        df = self.df.copy()
-        dist_m = df["km"].values * 1000.0
-        elev = df["elev_smooth"].values
-        slopes = df["datapoint_slope"].values if "datapoint_slope" in df else np.zeros_like(elev)
-
-        if len(dist_m) < 2:
+        df = self.df.dropna(subset=["km", "elev_smooth"]).copy()
+        if df.empty:
             return pd.DataFrame([])
 
+        dist_m = df["km"] * 1000.0
+        elev = df["elev_smooth"]
+
+        # średni odstęp między punktami
         avg_spacing = float(np.mean(np.diff(dist_m))) if len(dist_m) > 1 else window_m
         window_pts = max(2, int(window_m / max(avg_spacing, 1e-9)))
-        rolling_gain = np.convolve(np.r_[0.0, np.diff(elev)], np.ones(window_pts), mode="same")
-        rolling_dist = np.convolve(np.r_[0.0, np.diff(dist_m)], np.ones(window_pts), mode="same")
-        with np.errstate(divide="ignore", invalid="ignore"):
-            rolling_slope = (rolling_gain / rolling_dist) * 100.0
-        rolling_slope = np.nan_to_num(rolling_slope)
 
-        is_uphill = rolling_slope > (min_avg_slope / 2.0)
-        regions: List[Tuple[int, int]] = []
+        # rolling slope [%] = rolling delta_elev / rolling delta_dist
+        df["rolling_gain"] = elev.diff().rolling(window_pts, min_periods=1).sum()
+        df["rolling_dist"] = dist_m.diff().rolling(window_pts, min_periods=1).sum()
+        df["rolling_slope"] = (df["rolling_gain"] / df["rolling_dist"]) * 100
+        df["rolling_slope"] = df["rolling_slope"].fillna(0)
+
+        # regiony gdzie slope > połowy progu
+        is_uphill = df["rolling_slope"] > (min_avg_slope / 2.0)
+        regions: list[tuple[int, int]] = []
         start_idx: Optional[int] = None
         for i, up in enumerate(is_uphill):
             if up and start_idx is None:
@@ -216,41 +207,45 @@ class ClimbDetector:
                     regions.append((start_idx, i))
                 start_idx = None
         if start_idx is not None:
-            regions.append((start_idx, len(is_uphill) - 1))
+            regions.append((start_idx, len(df) - 1))
 
-        # Merge nearby uphill regions
-        merged: List[Tuple[int, int]] = []
+        # scalanie regionów blisko siebie
+        merged: list[tuple[int, int]] = []
         for seg in regions:
             if not merged:
                 merged.append(seg)
             else:
                 ps, pe = merged[-1]
-                if (dist_m[seg[0]] - dist_m[pe]) <= merge_gap_m:
+                if (dist_m.iloc[seg[0]] - dist_m.iloc[pe]) <= merge_gap_m:
                     merged[-1] = (ps, seg[1])
                 else:
                     merged.append(seg)
 
-        climbs: List[Dict[str, Any]] = []
+        climbs: list[dict[str, Any]] = []
+        slopes = df["datapoint_slope"].values if "datapoint_slope" in df else np.zeros(len(df))
         for s, e in merged:
             start_row = df.iloc[s]
             end_row = df.iloc[e]
             length_m = (end_row["km"] - start_row["km"]) * 1000.0
-            gain_m = elev[e] - elev[s]
+            gain_m = end_row["elev_smooth"] - start_row["elev_smooth"]
+
             if length_m < min_length_m or gain_m < min_gain_m:
                 continue
-            avg_slope = (gain_m / max(length_m, 1e-9)) * 100.0
+
+            avg_slope = (gain_m / max(length_m, 1e-9)) * 100
             if avg_slope < min_avg_slope:
                 continue
+
             climbs.append(
                 {
-                    "start_idx": int(s),
-                    "end_idx": int(e),
+                    "start_idx": s,
+                    "end_idx": e,
                     "start_km": float(start_row["km"]),
                     "end_km": float(end_row["km"]),
-                    "length_m": round(float(length_m), 1),
-                    "gain_m": round(float(gain_m), 1),
-                    "avg_grade_pct": round(float(avg_slope), 1),
-                    "max_grade_pct": round(float(np.max(slopes[s : e + 1]) if len(slopes) else 0.0), 1),
+                    "length_m": round(length_m, 1),
+                    "gain_m": round(gain_m, 1),
+                    "avg_grade_pct": round(avg_slope, 1),
+                    "max_grade_pct": round(float(np.max(slopes[s : e + 1])), 1),
                     "start_lat": float(start_row["latitude"]),
                     "start_lon": float(start_row["longitude"]),
                     "end_lat": float(end_row["latitude"]),
@@ -259,7 +254,6 @@ class ClimbDetector:
             )
 
         return pd.DataFrame(climbs)
-
 
 # ========================
 # 4) PlaceGeolocator (with caching)
@@ -524,7 +518,28 @@ class ElevationProfile:
     def get_route_data(self) -> pd.DataFrame:
         return self.data.copy()
 
+    def summary(self) -> dict[str, float | int]:
+            """Return a dictionary with key route statistics and GPX quality info."""
+            total_distance_km = float(self.data["km"].max() - self.data["km"].min())
+            climbs_df = self.detect_climbs()
 
+            # punkty i jakość GPX
+            num_points = len(self.data)
+            delta_m = self.data["km"].diff().dropna() * 1000.0
+            avg_spacing = float(delta_m.mean()) if not delta_m.empty else 0.0
+            median_spacing = float(delta_m.median()) if not delta_m.empty else 0.0
+
+            return {
+                "distance_km": round(total_distance_km, 2),
+                "total_ascent_m": round(self.get_total_ascent(), 1),
+                "total_descent_m": round(self.get_total_descent(), 1),
+                "highest_point_m": round(self.get_highest_point(), 1),
+                "lowest_point_m": round(self.get_lowest_point(), 1),
+                "num_climbs": int(len(climbs_df)),
+                "num_points": num_points,
+                "avg_spacing_m": round(avg_spacing, 2),
+                "median_spacing_m": round(median_spacing, 2),
+            }
 
 if __name__ == "__main__":
     from gpx_parser import GPXParser
