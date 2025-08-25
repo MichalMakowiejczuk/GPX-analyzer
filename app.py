@@ -1,49 +1,59 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import os
 import folium
 import matplotlib.pyplot as plt
 import streamlit.components.v1 as components
 import plotly.express as px
 
 from scripts.gpx_parser import GPXParser
-from scripts.elevation_profile_v2 import ElevationProfile
+from scripts.elevation_profile import ElevationProfile
 from scripts.climb_classification import classify_climb_difficulty
 from scripts.map_builder import build_base_map_with_detected_climbs
 
 # =====================
-# Konfiguracja strony
+# Page config
 # =====================
-st.set_page_config(page_title="Analiza trasy GPX", layout="wide", page_icon="🚴")
-st.title("🚴 Analiza trasy GPX")
+st.set_page_config(page_title="GPX profile analyzer", layout="wide", page_icon="🚴")
+st.title("GPX profile analyzer")
 
 # =====================
 # Panel boczny (ustawienia)
 # =====================
 with st.sidebar:
-    st.header("Ustawienia analizy")
-    smooth_window = st.number_input("Okno wygładzania profilu (rolling mean)", min_value=1, max_value=51, value=5, step=2)
-    st.markdown("---")
-    st.subheader("Wykrywanie podjazdów")
-    min_length = st.number_input("Minimalna długość podjazdu [m]", min_value=100, max_value=20000, value=500, step=100)
-    min_gain = st.number_input("Minimalny wznios [m]", min_value=10, max_value=2000, value=30, step=10)
-    min_avg_slope = st.number_input("Minimalne średnie nachylenie (%)", min_value=2.0, max_value=15.0, value=2.0, step=0.5)
-    merge_gap_m = st.number_input("Maksymalna długość zjazdu podczas podjazdu [km]", min_value=0, max_value=1000, value=100, step=50)
-    st.markdown("---")
-    st.subheader("Przedziały nachylenia (dla tabeli)")
-    slope_thresholds_str = st.text_input("Progi (w %), rozdzielone przecinkami", value="2,4,6,8")
+    uploaded_file = st.file_uploader("Upload GPX file:", type="gpx")
+    
+    data_dir = "sample_data"
+    example_files = []
+    if os.path.isdir(data_dir):
+        example_files = [f for f in os.listdir(data_dir) if f.endswith(".gpx")]
+
+    options = ["---"] + example_files
+    selected_example = st.selectbox(
+        "Or choose an example:", options
+    )
+    uploaded_file = uploaded_file or (open(os.path.join(data_dir, selected_example), "rb") if selected_example != "---" else None)
+    
+    st.subheader("Climb detection settings")
+    min_length = st.number_input("Minimal climb length [m]", min_value=100, max_value=20000, value=500, step=100)
+    min_gain = st.number_input("Minimal climb ascent [m]", min_value=10, max_value=2000, value=30, step=10)
+    min_avg_slope = st.number_input("Minimal average grade (%)", min_value=2.0, max_value=15.0, value=2.0, step=0.5)
+    merge_gap_m = st.number_input("Maximum descent/platau length during an ascent [km]", min_value=0, max_value=1000, value=100, step=50)
+    smooth_window = st.number_input("Profile smoothing window (rolling mean)", min_value=1, max_value=20, value=5, step=2)
+    st.subheader("Slope ranges for profile coloring")
+    slope_thresholds_str = st.text_input("Thresholds (in %), separated by commas", value="2,4,6,8")
     try:
         slope_thresholds = tuple(float(x.strip()) for x in slope_thresholds_str.split(",") if x.strip() != "")
     except Exception:
-        slope_thresholds = (2, 4, 5, 8)
-        st.warning("Nieprawidłowy format progów – używam domyślnych: 2,4,5,8")
+        slope_thresholds = (2, 4, 6, 8)
+        st.warning("Incorrect threshold format - I'm using the default ones: 2,4,6,8")
 
 # =====================
 # Upload pliku GPX
 # =====================
-uploaded_file = st.file_uploader("Wgraj plik GPX", type="gpx")
 if uploaded_file is None:
-    st.info("Wgraj plik GPX, aby rozpocząć analizę.")
+    st.info("Upload a GPX file to analyze its elevation profile and detect climbs.")
     st.stop()
 
 # =====================
@@ -51,8 +61,8 @@ if uploaded_file is None:
 # =====================
 parser = GPXParser(uploaded_file.read())
 track_df = parser.parse_to_dataframe()
-main_profile = ElevationProfile(track_df, seg_unit_km=0.2, smooth_window=smooth_window)
-track_df = main_profile.get_track_df()
+main_profile = ElevationProfile(track_df, seg_unit_km=0.5, smooth_window=smooth_window)
+#track_df = main_profile.get_route_data()
 
 total_distance_km = float(track_df["km"].max())
 total_ascent_m = float(main_profile.get_total_ascent())
@@ -63,11 +73,17 @@ lowest_point_m = float(main_profile.get_lowest_point())
 # =====================
 # Analiza profilu głównego
 # =====================
-main_profile_plot, ax = main_profile.plot(
+main_profile_plot, ax = main_profile.plot_profile(
     show_labels=False,
     show_background=True,
     slope_thresholds=slope_thresholds
 )
+if total_distance_km < 10:
+    ax.set_xticks(np.arange(0, total_distance_km, 1))
+elif total_distance_km < 50:
+    ax.set_xticks(np.arange(0, total_distance_km, 5))
+else:
+    ax.set_xticks(np.arange(0, total_distance_km, 10))
 
 # =====================
 # Wykrywanie podjazdów i dodawanie ich do mapy
@@ -78,7 +94,8 @@ climbs_df = main_profile.detect_climbs(
     min_avg_slope=min_avg_slope,
     merge_gap_m=merge_gap_m,
 )
-base_map = build_base_map_with_detected_climbs(track_df, climbs_df)
+track_df_for_map = main_profile.get_route_data()
+base_map = build_base_map_with_detected_climbs(track_df_for_map, climbs_df)
 
 if not climbs_df.empty:
     climbs_df.index = np.arange(1, len(climbs_df) + 1)
@@ -125,6 +142,43 @@ with col2:
 # =====================
 with st.expander("Główny profil wysokościowy", expanded=True):
     st.pyplot(main_profile_plot, use_container_width=True)
+
+# =====================
+# Wybrany fragment profilu trasy
+# =====================
+with st.expander("Wybrany fragment profilu trasy", expanded=False):
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        min_km = float(track_df["km"].min())
+        max_km = float(track_df["km"].max())
+        selected_range = st.slider(
+            "Wybierz zakres odległości [km]:",
+            min_value=min_km,
+            max_value=max_km,
+            value=(min_km, max_km),
+            step=0.1
+        )
+    with col2:
+        st.markdown(f"**Zakres:** {selected_range[0]:.2f} km - {selected_range[1]:.2f} km")
+
+    if selected_range[0] >= selected_range[1]:
+        st.warning("Nieprawidłowy zakres. Upewnij się, że wartość początkowa jest mniejsza niż końcowa.")
+    else:
+        segment_df = track_df[(track_df["km"] >= selected_range[0]) & (track_df["km"] <= selected_range[1])]
+        if len(segment_df) < 3:
+            st.info("Zbyt mało punktów do sensownego wykresu. Spróbuj zmienić wygładzanie lub wybrać inny zakres.")
+        else:
+            segment_profile = ElevationProfile(segment_df, seg_unit_km=0.5, smooth_window=smooth_window)
+            fig_s, ax_s = segment_profile.plot_profile(
+                show_labels=False,
+                show_background=True,
+                slope_thresholds=slope_thresholds,
+                slope_type="segment"
+            )
+            # ax_s.set_xticks(np.arange(selected_range[0], selected_range[1]+0.1, 0.5))
+            # ax_s.set_ylim(segment_df["elevation"].min(), segment_df["elevation"].max())
+            st.pyplot(fig_s, use_container_width=True)
+            plt.close(fig_s)
 
 # =====================
 # Tabela długości wg przedziałów nachylenia
@@ -188,11 +242,11 @@ else:
                     climb_df = climb_df.copy()
                     climb_df["km"] -= climb_df["km"].iloc[0]
                     climb_profile = ElevationProfile(climb_df, seg_unit_km=0.1, smooth_window=smooth_window)
-                    fig_c, ax_c = climb_profile.plot(
+                    fig_c, ax_c = climb_profile.plot_profile(
                         show_labels=False,
                         show_background=False,
                         slope_thresholds=slope_thresholds,
-                        slope_type="datapoint"
+                        slope_type="segment"
                     )
                     ax_c.set_ylim(climb_df["elevation"].min(), climb_df["elevation"].max())
 
