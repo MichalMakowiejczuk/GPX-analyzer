@@ -11,7 +11,6 @@ class ClimbDetector:
     def detect(
         self,
         min_length_m: float = 500,
-        min_gain_m: float = 30,
         min_avg_slope: float = 2.0,
         window_m: float = 200,
         merge_gap_m: float = 100,
@@ -67,7 +66,7 @@ class ClimbDetector:
             length_m = (end_row["km"] - start_row["km"]) * 1000.0
             gain_m = end_row["elev_smooth"] - start_row["elev_smooth"]
 
-            if length_m < min_length_m or gain_m < min_gain_m:
+            if length_m < min_length_m:
                 continue
 
             avg_slope = (gain_m / max(length_m, 1e-9)) * 100

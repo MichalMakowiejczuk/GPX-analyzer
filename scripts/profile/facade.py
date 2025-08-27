@@ -56,14 +56,12 @@ class ElevationProfile:
     def detect_climbs(
         self,
         min_length_m: float = 500,
-        min_gain_m: float = 30,
         min_avg_slope: float = 2.0,
         window_m: float = 200,
         merge_gap_m: float = 100,
     ) -> pd.DataFrame:
         return self.climb_detector.detect(
             min_length_m=min_length_m,
-            min_gain_m=min_gain_m,
             min_avg_slope=min_avg_slope,
             window_m=window_m,
             merge_gap_m=merge_gap_m,
@@ -113,8 +111,6 @@ class ElevationProfile:
 
     def summary(self) -> dict[str, float | int | str]:
         total_distance_km = float(self.data["km"].max() - self.data["km"].min())
-        climbs_df = self.climb_detector.detect()
-
         gpx_quality = GpxQualityAnalyzer(self.data).analyze()
 
         stats = {
@@ -123,6 +119,6 @@ class ElevationProfile:
             "total_descent_m": round(self.slope.get_total_descent(), 1),
             "highest_point_m": round(self.slope.get_highest_point(), 1),
             "lowest_point_m": round(self.slope.get_lowest_point(), 1),
-            "num_climbs": int(len(climbs_df)),
+            "AVG slope (%)": round((self.slope.get_total_ascent() - self.slope.get_total_descent()) / max(total_distance_km * 10, 1e-9), 2) if total_distance_km > 0 else 0.0, # uwzględnia zjazdy
         }
         return {**stats, **gpx_quality}

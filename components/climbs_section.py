@@ -13,7 +13,7 @@ def render_climbs_section(climbs_df, track_df, slope_thresholds, smooth_window):
                      use_container_width=True)
 
     st.subheader("Elevation profiles of detected climbs")
-    tab_titles = [f"Podjazd {i+1}" for i in range(len(climbs_df))]
+    tab_titles = [f"Climb {i+1}" for i in range(len(climbs_df))]
     tabs = st.tabs(tab_titles)
 
     for i, row in enumerate(climbs_df.itertuples()):
@@ -28,7 +28,7 @@ def render_climbs_section(climbs_df, track_df, slope_thresholds, smooth_window):
                 continue
 
             climb_df["km"] -= climb_df["km"].iloc[0]
-            seg_unit_km = 0.1 if row.length_m < 2000 else 0.25 if row.length_m < 5000 else 0.5
+            seg_unit_km = 0.25 if row.length_m < 3000 else 0.5
 
             climb_profile = ElevationProfile(climb_df, seg_unit_km=seg_unit_km, smooth_window=smooth_window)
             fig_c, ax_c = climb_profile.plot_profile(show_labels=False,

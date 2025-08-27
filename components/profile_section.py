@@ -1,6 +1,7 @@
 import streamlit as st
 import matplotlib.pyplot as plt
 import plotly.express as px
+import pandas as pd
 from scripts.profile import ElevationProfile
 
 def render_segment_profile(track_df, smooth_window, slope_thresholds):
@@ -14,9 +15,7 @@ def render_segment_profile(track_df, smooth_window, slope_thresholds):
                                        max_value=max_km,
                                        value=(min_km, max_km),
                                        step=0.1)
-        with col2:
-            st.markdown(f"**Selected range:** {selected_range[0]:.2f} km - {selected_range[1]:.2f} km")
-
+         
         if selected_range[0] >= selected_range[1]:
             st.warning("Invalid range. Make sure the starting value is less than the ending value.")
             return
@@ -27,10 +26,21 @@ def render_segment_profile(track_df, smooth_window, slope_thresholds):
             return
 
         segment_profile = ElevationProfile(segment_df, seg_unit_km=0.5, smooth_window=smooth_window)
+        segment_stats = segment_profile.summary()
+        with col2: 
+            st.write(segment_stats)
+
         fig_s, _ = segment_profile.plot_profile(show_labels=False,
                                                 show_background=True,
                                                 slope_thresholds=slope_thresholds,
                                                 slope_type="segment")
+        
+        # set y-axis limits with some margin
+        elev_min = segment_df["elevation"].min() 
+        elev_max = segment_df["elevation"].max()
+        elev_margin = (elev_max - elev_min) * 0.1
+        plt.ylim(elev_min - elev_margin, elev_max + elev_margin)
+
         st.pyplot(fig_s, use_container_width=True)
         plt.close(fig_s)
 

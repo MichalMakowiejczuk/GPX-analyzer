@@ -14,7 +14,7 @@ from scripts.climb_classification import classify_climb_difficulty
 def main():
     st.set_page_config(page_title="GPX profile analyzer", layout="wide", page_icon="🚴")
     st.title("GPX profile analyzer")
-    uploaded_file, min_length, min_gain, min_avg_slope, merge_gap_m, smooth_window, slope_thresholds = render_sidebar()
+    uploaded_file, min_length, min_avg_slope, merge_gap_m, smooth_window, slope_thresholds = render_sidebar()
 
     if uploaded_file is None:
         st.info("Upload a GPX file to analyze its elevation profile and detect climbs.")
@@ -28,7 +28,7 @@ def main():
     main_profile_plot = plot_main_profile(profile, slope_thresholds)
 
     # Wykrywanie podjazdów
-    climbs_df = detect_climbs(profile, min_length, min_gain, min_avg_slope, merge_gap_m)
+    climbs_df = detect_climbs(profile, min_length, min_avg_slope, merge_gap_m)
     if not climbs_df.empty:
         climbs_df.index = np.arange(1, len(climbs_df) + 1)
         climbs_df['start_km'] = climbs_df['start_km'].round(2)

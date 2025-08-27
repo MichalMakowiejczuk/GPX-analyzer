@@ -79,7 +79,7 @@ class ProfilePlotter:
                     last_label_km = float(row["km"])
 
         ax.plot(self.df["km"], self.df["elev_smooth"], color="darkgrey", linewidth=0.15)
-        y_lower_bound = math.floor(float(self.df["elevation"].min()) * 0.8 / 100.0) * 100.0
+        y_lower_bound = math.floor(float(self.df["elevation"].min()) * 0.9 / 100.0) * 100.0
         ax.set_ylim(y_lower_bound, float(self.df["elevation"].max()) * 1.1)
         ax.set_xlim(float(self.df["km"].min()), float(self.df["km"].max()))
         ax.legend(handles=legend, loc="center left", bbox_to_anchor=(1, 0.5))
