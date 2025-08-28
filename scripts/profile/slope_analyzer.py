@@ -1,6 +1,9 @@
-import pandas as pd
 from typing import Tuple
+
+import pandas as pd
+
 from .utils import _get_slope_bins
+
 
 class SlopeAnalyzer:
     """Compute slopes and slope-based statistics."""
@@ -15,9 +18,7 @@ class SlopeAnalyzer:
         df["delta_elev"] = df["elev_smooth"].diff()
         df["delta_dist_m"] = df["delta_km"] * 1000.0
         df["slope_pct"] = (df["delta_elev"] / df["delta_dist_m"]) * 100.0
-        # slope na poziomie punktu (tak jak miałeś)
         df["datapoint_slope"] = df["slope_pct"]
-        # slope uśredniony na segment
         df["segment_slope"] = df.groupby("segment")["slope_pct"].transform("mean")
         self.df = df
 
@@ -43,7 +44,9 @@ class SlopeAnalyzer:
         df = df[df["delta_km"] > min_delta_km]
 
         thresholds, labels = _get_slope_bins(slope_thresholds)
-        df["slope_range"] = pd.cut(df["slope_pct"], bins=thresholds, labels=labels, right=True)
+        df["slope_range"] = pd.cut(
+            df["slope_pct"], bins=thresholds, labels=labels, right=True
+        )
 
         result = (
             df.groupby("slope_range")["delta_km"]
@@ -53,5 +56,7 @@ class SlopeAnalyzer:
         )
         total = result["length_km"].sum()
         result["length_km"] = result["length_km"].round(2)
-        result["% of total"] = (result["length_km"] / total * 100).round(2) if total else 0
+        result["% of total"] = (
+            (result["length_km"] / total * 100).round(2) if total else 0
+        )
         return result

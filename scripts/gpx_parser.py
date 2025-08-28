@@ -1,7 +1,9 @@
+import io
+
 import gpxpy
 import pandas as pd
 from geopy.distance import geodesic
-import io
+
 
 class GPXParser:
     """Parse GPX data into a pandas DataFrame."""
@@ -80,13 +82,19 @@ class GPXParser:
         for track in gpx.tracks:
             for segment in track.segments:
                 for point in segment.points:
-                    dist = self._get_distance(last_lat, last_lon, point.latitude, point.longitude)
+                    dist = self._get_distance(
+                        last_lat, last_lon, point.latitude, point.longitude
+                    )
                     km += dist
-                    track_data.append([km, point.latitude, point.longitude, point.elevation])
+                    track_data.append(
+                        [km, point.latitude, point.longitude, point.elevation]
+                    )
                     last_lat, last_lon = point.latitude, point.longitude
 
         # Create DataFrame
-        self.track_df = pd.DataFrame(track_data, columns=["km", "latitude", "longitude", "elevation"])
+        self.track_df = pd.DataFrame(
+            track_data, columns=["km", "latitude", "longitude", "elevation"]
+        )
         if self.track_df.empty:
             raise ValueError("No points found in the GPX track.")
 

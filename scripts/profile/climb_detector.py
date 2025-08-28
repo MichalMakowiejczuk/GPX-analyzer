@@ -1,6 +1,8 @@
+from typing import Any, Optional
+
 import numpy as np
 import pandas as pd
-from typing import Any, Optional
+
 
 class ClimbDetector:
     """Detect climbs based on length, gain, and slope criteria."""
@@ -14,6 +16,7 @@ class ClimbDetector:
         min_avg_slope: float = 2.0,
         window_m: float = 200,
         merge_gap_m: float = 100,
+        base_detection_slope: float = 2.0,
     ) -> pd.DataFrame:
         df = self.df.dropna(subset=["km", "elev_smooth"]).copy()
         if df.empty:
@@ -22,18 +25,16 @@ class ClimbDetector:
         dist_m = df["km"] * 1000.0
         elev = df["elev_smooth"]
 
-        # średni odstęp między punktami
+        # rolling slope
         avg_spacing = float(np.mean(np.diff(dist_m))) if len(dist_m) > 1 else window_m
         window_pts = max(2, int(window_m / max(avg_spacing, 1e-9)))
 
-        # rolling slope [%] = rolling delta_elev / rolling delta_dist
         df["rolling_gain"] = elev.diff().rolling(window_pts, min_periods=1).sum()
         df["rolling_dist"] = dist_m.diff().rolling(window_pts, min_periods=1).sum()
         df["rolling_slope"] = (df["rolling_gain"] / df["rolling_dist"]) * 100
         df["rolling_slope"] = df["rolling_slope"].fillna(0)
 
-        # regiony gdzie slope > połowy progu
-        is_uphill = df["rolling_slope"] > (min_avg_slope / 2.0)
+        is_uphill = df["rolling_slope"] > (base_detection_slope / 2.0)
         regions: list[tuple[int, int]] = []
         start_idx: Optional[int] = None
         for i, up in enumerate(is_uphill):
@@ -46,7 +47,7 @@ class ClimbDetector:
         if start_idx is not None:
             regions.append((start_idx, len(df) - 1))
 
-        # scalanie regionów blisko siebie
+        # merge close segments
         merged: list[tuple[int, int]] = []
         for seg in regions:
             if not merged:
@@ -59,12 +60,18 @@ class ClimbDetector:
                     merged.append(seg)
 
         climbs: list[dict[str, Any]] = []
-        slopes = df["datapoint_slope"].values if "datapoint_slope" in df else np.zeros(len(df))
+        slopes = (
+            df["datapoint_slope"].values
+            if "datapoint_slope" in df
+            else np.zeros(len(df))
+        )
         for s, e in merged:
             start_row = df.iloc[s]
             end_row = df.iloc[e]
             length_m = (end_row["km"] - start_row["km"]) * 1000.0
-            gain_m = end_row["elev_smooth"] - start_row["elev_smooth"]
+            segment_elev = elev.iloc[s : e + 1].values
+            segment_gain = np.diff(segment_elev)
+            gain_m = float(np.sum(segment_gain[segment_gain > 0]))
 
             if length_m < min_length_m:
                 continue
