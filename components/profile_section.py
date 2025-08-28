@@ -1,3 +1,5 @@
+from typing import Tuple
+
 import matplotlib.pyplot as plt
 import pandas as pd
 import plotly.express as px
@@ -6,7 +8,9 @@ import streamlit as st
 from scripts.profile import ElevationProfile
 
 
-def render_segment_profile(track_df, smooth_window, slope_thresholds):
+def render_segment_profile(
+    track_df: pd.DataFrame, smooth_window: int, slope_thresholds: Tuple
+) -> None:
     with st.expander("Selected fragment of the route profile", expanded=False):
         col1, col2, col3, col4, col5 = st.columns([2, 1, 1, 1, 1])
         min_km = float(track_df["km"].min())
@@ -76,7 +80,7 @@ def render_segment_profile(track_df, smooth_window, slope_thresholds):
         plt.close(fig_s)
 
 
-def render_slope_table(profile, slope_thresholds):
+def render_slope_table(profile: ElevationProfile, slope_thresholds: Tuple) -> None:
     slope_df = profile.compute_slope_lengths(slope_thresholds=slope_thresholds)
 
     slope_df = slope_df.rename(

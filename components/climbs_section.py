@@ -1,11 +1,19 @@
+from typing import Tuple
+
 import matplotlib.pyplot as plt
+import pandas as pd
 import streamlit as st
 
 from scripts.climb_classification import classify_climb_difficulty
 from scripts.profile import ElevationProfile
 
 
-def render_climbs_section(climbs_df, track_df, slope_thresholds, smooth_window):
+def render_climbs_section(
+    climbs_df: pd.DataFrame,
+    track_df: pd.DataFrame,
+    slope_thresholds: Tuple,
+    smooth_window: int,
+) -> None:
     if climbs_df.empty:
         st.warning("No climbs detected for the given parameters.")
         return

@@ -1,16 +1,22 @@
-def compute_route_stats(profile):
+import pandas as pd
+
+from scripts.profile import ElevationProfile
+
+
+def compute_route_stats(profile: ElevationProfile) -> dict:
     route_df = profile.get_route_data()
     return {
         "distance_km": float(route_df["km"].max()),
         "ascent_m": float(profile.get_total_ascent()),
         "descent_m": float(profile.get_total_descent()),
         "highest_point": float(profile.get_highest_point()),
-        "lowest_point": float(profile.get_lowest_point())
+        "lowest_point": float(profile.get_lowest_point()),
     }
 
-def detect_climbs(profile, min_length, min_avg_slope, merge_gap_m):
+
+def detect_climbs(
+    profile: ElevationProfile, min_length: int, min_avg_slope: float, merge_gap_m: int
+) -> pd.DataFrame:
     return profile.detect_climbs(
-        min_length_m=min_length,
-        min_avg_slope=min_avg_slope,
-        merge_gap_m=merge_gap_m
+        min_length_m=min_length, min_avg_slope=min_avg_slope, merge_gap_m=merge_gap_m
     )

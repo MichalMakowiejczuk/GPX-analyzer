@@ -1,8 +1,12 @@
-import numpy as np
-import pandas as pd
 from typing import List, Tuple
 
-def _get_slope_bins(slope_thresholds: Tuple[float, ...]) -> Tuple[List[float], List[str]]:
+import numpy as np
+import pandas as pd
+
+
+def _get_slope_bins(
+    slope_thresholds: Tuple[float, ...],
+) -> Tuple[List[float], List[str]]:
     """Generate slope bin edges and human-friendly labels.
 
     Returns
@@ -23,6 +27,7 @@ def _get_slope_bins(slope_thresholds: Tuple[float, ...]) -> Tuple[List[float], L
             labels.append(f"{low} ~ {high}%")
     return thresholds, labels
 
+
 def _validate_track_df(df: pd.DataFrame) -> pd.DataFrame:
     """Validate required columns and non-empty DataFrame; return a copy."""
     required = {"km", "elevation", "latitude", "longitude"}
@@ -30,5 +35,7 @@ def _validate_track_df(df: pd.DataFrame) -> pd.DataFrame:
         raise ValueError("The input DataFrame is empty.")
     missing = required.difference(df.columns)
     if missing:
-        raise ValueError(f"The DataFrame must contain the following columns: {required}; missing: {missing}")
+        raise ValueError(
+            f"The DataFrame must contain the following columns: {required}; missing: {missing}"
+        )
     return df.copy()

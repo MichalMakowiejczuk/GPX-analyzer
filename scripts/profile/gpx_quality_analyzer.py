@@ -1,5 +1,6 @@
 import pandas as pd
 
+
 class GpxQualityAnalyzer:
     """Analyze GPX track quality based on point density and spacing."""
 
@@ -23,5 +24,5 @@ class GpxQualityAnalyzer:
         return {
             "num_points": num_points,
             "avg_spacing_m": round(avg_spacing, 2),
-            "median_spacing_m": round(median_spacing, 2)
+            "median_spacing_m": round(median_spacing, 2),
         }

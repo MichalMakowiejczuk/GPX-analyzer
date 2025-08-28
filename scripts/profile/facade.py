@@ -1,12 +1,15 @@
-import pandas as pd
+from typing import List, Optional, Tuple
+
 import matplotlib.pyplot as plt
-from typing import Optional, Tuple, List
-from .track_processor import TrackDataProcessor
-from .slope_analyzer import SlopeAnalyzer
+import pandas as pd
+
 from .climb_detector import ClimbDetector
-from .profile_plotter import ProfilePlotter
-from .place_geolocator import PlaceGeolocator
 from .gpx_quality_analyzer import GpxQualityAnalyzer
+from .place_geolocator import PlaceGeolocator
+from .profile_plotter import ProfilePlotter
+from .slope_analyzer import SlopeAnalyzer
+from .track_processor import TrackDataProcessor
+
 
 class ElevationProfile:
     """Facade providing a clean, high-level API while delegating to components.
@@ -19,8 +22,12 @@ class ElevationProfile:
     smooth_window : int, default 5
     """
 
-    def __init__(self, track_df: pd.DataFrame, seg_unit_km: float = 0.5, smooth_window: int = 5) -> None:
-        processor = TrackDataProcessor(track_df, seg_unit_km=seg_unit_km, smooth_window=smooth_window)
+    def __init__(
+        self, track_df: pd.DataFrame, seg_unit_km: float = 0.5, smooth_window: int = 5
+    ) -> None:
+        processor = TrackDataProcessor(
+            track_df, seg_unit_km=seg_unit_km, smooth_window=smooth_window
+        )
         self.data: pd.DataFrame = processor.track_df
 
         # Analysis components
@@ -42,16 +49,26 @@ class ElevationProfile:
         rate_limit_sec: int = 1,
         user_agent: str = "ElevationProfileApp",
     ) -> pd.DataFrame:
-        if self._geolocator is None or (self._geolocator and self._geolocator.cache_file != cache_file):
-            self._geolocator = PlaceGeolocator(cache_file=cache_file, user_agent=user_agent)
-        self.places_df = self._geolocator.geolocate(self.data, min_distance_km=min_distance_km, rate_limit_sec=rate_limit_sec)
+        if self._geolocator is None or (
+            self._geolocator and self._geolocator.cache_file != cache_file
+        ):
+            self._geolocator = PlaceGeolocator(
+                cache_file=cache_file, user_agent=user_agent
+            )
+        self.places_df = self._geolocator.geolocate(
+            self.data, min_distance_km=min_distance_km, rate_limit_sec=rate_limit_sec
+        )
         return self.places_df
 
     # ---------- Stats ----------
     def compute_slope_lengths(
-        self, slope_thresholds: Tuple[float, ...] = (2, 4, 6, 8), min_delta_km: float = 1e-4
+        self,
+        slope_thresholds: Tuple[float, ...] = (2, 4, 6, 8),
+        min_delta_km: float = 1e-4,
     ) -> pd.DataFrame:
-        return self.slope.compute_slope_lengths(slope_thresholds=slope_thresholds, min_delta_km=min_delta_km)
+        return self.slope.compute_slope_lengths(
+            slope_thresholds=slope_thresholds, min_delta_km=min_delta_km
+        )
 
     def detect_climbs(
         self,
@@ -88,7 +105,13 @@ class ElevationProfile:
         background_shift_km: float = 0.5,
         background_shift_elev: float = 15.0,
         slope_thresholds: Tuple[float, ...] = (2, 4, 6, 8),
-        slope_colors: Tuple[str, ...] = ("lightgreen", "yellow", "orange", "orangered", "maroon"),
+        slope_colors: Tuple[str, ...] = (
+            "lightgreen",
+            "yellow",
+            "orange",
+            "orangered",
+            "maroon",
+        ),
         slope_labels: Optional[List[str]] = None,
         slope_type: str = "segment",
     ) -> Tuple[plt.Figure, plt.Axes]:
@@ -119,6 +142,14 @@ class ElevationProfile:
             "total_descent_m": round(self.slope.get_total_descent(), 1),
             "highest_point_m": round(self.slope.get_highest_point(), 1),
             "lowest_point_m": round(self.slope.get_lowest_point(), 1),
-            "AVG slope (%)": round((self.slope.get_total_ascent() - self.slope.get_total_descent()) / max(total_distance_km * 10, 1e-9), 2) if total_distance_km > 0 else 0.0, # uwzględnia zjazdy
+            "AVG slope (%)": (
+                round(
+                    (self.slope.get_total_ascent() - self.slope.get_total_descent())
+                    / max(total_distance_km * 10, 1e-9),
+                    2,
+                )
+                if total_distance_km > 0
+                else 0.0
+            ),  # uwzględnia zjazdy
         }
         return {**stats, **gpx_quality}

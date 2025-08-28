@@ -1,15 +1,21 @@
+import json
 import os
 import time
-import json
-import pandas as pd
 from typing import Any, Dict, List, Optional
-from geopy.geocoders import Nominatim
+
+import pandas as pd
 from geopy.exc import GeocoderTimedOut, GeocoderUnavailable
+from geopy.geocoders import Nominatim
+
 
 class PlaceGeolocator:
     """Reverse-geocode notable places along the route and de-duplicate by distance."""
 
-    def __init__(self, cache_file: str = "places_cache.json", user_agent: str = "ElevationProfileApp") -> None:
+    def __init__(
+        self,
+        cache_file: str = "places_cache.json",
+        user_agent: str = "ElevationProfileApp",
+    ) -> None:
         self.cache_file = cache_file
         self.cache: Dict[str, Optional[str]] = self._load_cache(cache_file)
         self.geolocator = Nominatim(user_agent=user_agent)
@@ -44,15 +50,26 @@ class PlaceGeolocator:
         for segment in df["segment"].unique():
             segment_df = df[df["segment"] == segment]
             row = segment_df.loc[segment_df["km"].idxmin()]
-            lat, lon, elev, km = row["latitude"], row["longitude"], row["elevation"], row["km"]
+            lat, lon, elev, km = (
+                row["latitude"],
+                row["longitude"],
+                row["elevation"],
+                row["km"],
+            )
             coords_key = f"{lat:.5f},{lon:.5f}"
 
             place_name = self.cache.get(coords_key)
             if place_name is None:
                 try:
-                    location = self.geolocator.reverse(f"{lat},{lon}", exactly_one=True, timeout=10)
+                    location = self.geolocator.reverse(
+                        f"{lat},{lon}", exactly_one=True, timeout=10
+                    )
                     address = location.raw.get("address", {}) if location else {}
-                    place_name = address.get("city") or address.get("town") or address.get("village")
+                    place_name = (
+                        address.get("city")
+                        or address.get("town")
+                        or address.get("village")
+                    )
                     self.cache[coords_key] = place_name
                     time.sleep(rate_limit_sec)
                 except (GeocoderTimedOut, GeocoderUnavailable):
@@ -60,13 +77,24 @@ class PlaceGeolocator:
                 except Exception:
                     continue
 
-            if place_name and ((place_name not in place_last_km) or (km - place_last_km[place_name] >= min_distance_km)):
+            if place_name and (
+                (place_name not in place_last_km)
+                or (km - place_last_km[place_name] >= min_distance_km)
+            ):
                 place_group += 1
                 place_last_km[place_name] = float(km)
-                places.append([int(segment), str(place_name), float(elev), float(km), int(place_group)])
+                places.append(
+                    [
+                        int(segment),
+                        str(place_name),
+                        float(elev),
+                        float(km),
+                        int(place_group),
+                    ]
+                )
 
         self._save_cache()
-        places_df = pd.DataFrame(places, columns=["segment", "place", "elevation", "km", "group"]).drop_duplicates(
-            subset=["place"]
-        )
+        places_df = pd.DataFrame(
+            places, columns=["segment", "place", "elevation", "km", "group"]
+        ).drop_duplicates(subset=["place"])
         return places_df.sort_values(["group", "km"]).reset_index(drop=True)

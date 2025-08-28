@@ -1,9 +1,12 @@
 import math
-import pandas as pd
-import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
 from typing import List, Optional, Tuple
+
+import matplotlib.patches as mpatches
+import matplotlib.pyplot as plt
+import pandas as pd
+
 from .utils import _get_slope_bins
+
 
 class ProfilePlotter:
     """Plot elevation profile with slope-based coloring and optional labels."""
@@ -20,7 +23,13 @@ class ProfilePlotter:
         background_shift_km: float = 0.5,
         background_shift_elev: float = 15.0,
         slope_thresholds: Tuple[float, ...] = (2, 4, 6, 8),
-        slope_colors: Tuple[str, ...] = ("lightgreen", "yellow", "orange", "orangered", "maroon"),
+        slope_colors: Tuple[str, ...] = (
+            "lightgreen",
+            "yellow",
+            "orange",
+            "orangered",
+            "maroon",
+        ),
         slope_labels: Optional[List[str]] = None,
         slope_type: str = "segment",
     ) -> Tuple[plt.Figure, plt.Axes]:
@@ -48,9 +57,13 @@ class ProfilePlotter:
         legend: List[mpatches.Patch] = []
         for i, color in enumerate(slope_colors):
             if slope_type == "segment":
-                mask = (self.df["segment_slope"] >= thresholds[i]) & (self.df["segment_slope"] < thresholds[i + 1])
+                mask = (self.df["segment_slope"] >= thresholds[i]) & (
+                    self.df["segment_slope"] < thresholds[i + 1]
+                )
             else:
-                mask = (self.df["datapoint_slope"] >= thresholds[i]) & (self.df["datapoint_slope"] < thresholds[i + 1])
+                mask = (self.df["datapoint_slope"] >= thresholds[i]) & (
+                    self.df["datapoint_slope"] < thresholds[i + 1]
+                )
             ax.fill_between(
                 self.df["km"],
                 self.df["elev_smooth"],
@@ -79,7 +92,9 @@ class ProfilePlotter:
                     last_label_km = float(row["km"])
 
         ax.plot(self.df["km"], self.df["elev_smooth"], color="darkgrey", linewidth=0.15)
-        y_lower_bound = math.floor(float(self.df["elevation"].min()) * 0.9 / 100.0) * 100.0
+        y_lower_bound = (
+            math.floor(float(self.df["elevation"].min()) * 0.9 / 100.0) * 100.0
+        )
         ax.set_ylim(y_lower_bound, float(self.df["elevation"].max()) * 1.1)
         ax.set_xlim(float(self.df["km"].min()), float(self.df["km"].max()))
         ax.legend(handles=legend, loc="center left", bbox_to_anchor=(1, 0.5))

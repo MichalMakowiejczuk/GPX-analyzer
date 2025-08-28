@@ -12,7 +12,7 @@ from services.map_service import generate_map
 from services.plot_service import plot_main_profile
 
 
-def main():
+def main() -> None:
     st.set_page_config(page_title="GPX profile analyzer", layout="wide", page_icon="🚴")
     st.title("GPX profile analyzer")
     (

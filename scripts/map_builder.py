@@ -1,11 +1,12 @@
 import folium
 import pandas as pd
 
+
 def build_base_map_with_detected_climbs(
     track_df: pd.DataFrame,
     climbs_df: pd.DataFrame,
     default_color: str = "blue",
-    climb_color: str = "orange"
+    climb_color: str = "orange",
 ) -> folium.Map:
     """
     Build an interactive map with a route and highlighted climb segments.
@@ -32,7 +33,7 @@ def build_base_map_with_detected_climbs(
     """
     if track_df.empty:
         raise ValueError("track_df is empty. Cannot build map.")
-    
+
     start_coords = (track_df["latitude"].iloc[0], track_df["longitude"].iloc[0])
     m = folium.Map(location=start_coords, zoom_start=13, control_scale=True)
 
@@ -40,7 +41,7 @@ def build_base_map_with_detected_climbs(
     climb_segments = []
     if not climbs_df.empty:
         for _, row in climbs_df.iterrows():
-            climb_segments.append((row['start_idx'], row['end_idx']))
+            climb_segments.append((row["start_idx"], row["end_idx"]))
 
     # Add route segments to the map
     for i in range(len(track_df) - 1):
@@ -53,7 +54,7 @@ def build_base_map_with_detected_climbs(
 
         coords = [
             (track_df["latitude"].iloc[i], track_df["longitude"].iloc[i]),
-            (track_df["latitude"].iloc[i + 1], track_df["longitude"].iloc[i + 1])
+            (track_df["latitude"].iloc[i + 1], track_df["longitude"].iloc[i + 1]),
         ]
         folium.PolyLine(coords, color=color, weight=5, opacity=0.8).add_to(m)
 
@@ -61,13 +62,13 @@ def build_base_map_with_detected_climbs(
     folium.Marker(
         (track_df["latitude"].iloc[0], track_df["longitude"].iloc[0]),
         popup="Start",
-        icon=folium.Icon(color="green")
+        icon=folium.Icon(color="green"),
     ).add_to(m)
-    
+
     folium.Marker(
         (track_df["latitude"].iloc[-1], track_df["longitude"].iloc[-1]),
         popup="Finish",
-        icon=folium.Icon(color="red")
+        icon=folium.Icon(color="red"),
     ).add_to(m)
 
     return m

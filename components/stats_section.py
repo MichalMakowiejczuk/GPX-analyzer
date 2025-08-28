@@ -2,7 +2,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 
-def render_main_stats_and_map(stats, base_map):
+def render_main_stats_and_map(stats, base_map) -> None:
     col1, col2 = st.columns([1, 5])
     with col1:
         st.subheader("Map and stats")
