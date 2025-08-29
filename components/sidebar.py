@@ -32,17 +32,17 @@ def render_sidebar() -> tuple:
 
     st.sidebar.subheader("Climb detection settings")
     min_length = st.sidebar.number_input(
-        "Minimal climb length [m]", min_value=100, max_value=30000, value=500, step=250
+        "Minimal climb length [m]", min_value=100, max_value=30000, value=500, step=200
     )
     min_avg_slope = st.sidebar.number_input(
-        "Minimal average grade (%)", min_value=2.0, max_value=16.0, value=3.0, step=0.5
+        "Minimal average slope (%)", min_value=2.0, max_value=16.0, value=3.0, step=0.5
     )
     merge_gap_m = st.sidebar.number_input(
         "Maximum descent/platau length during an ascent [m]",
         min_value=0,
-        max_value=2000,
+        max_value=4000,
         value=100,
-        step=50,
+        step=100,
     )
     smooth_window = st.sidebar.number_input(
         "Profile smoothing window (rolling mean)",

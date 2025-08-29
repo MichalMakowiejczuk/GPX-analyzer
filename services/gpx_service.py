@@ -1,5 +1,6 @@
 from typing import Tuple
 
+import pandas as pd
 import streamlit as st
 
 from scripts.gpx_parser import GPXParser

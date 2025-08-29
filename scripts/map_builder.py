@@ -59,16 +59,27 @@ def build_base_map_with_detected_climbs(
         folium.PolyLine(coords, color=color, weight=5, opacity=0.8).add_to(m)
 
     # Add start and finish markers
-    folium.Marker(
-        (track_df["latitude"].iloc[0], track_df["longitude"].iloc[0]),
-        popup="Start",
-        icon=folium.Icon(color="green"),
-    ).add_to(m)
+    # if start and finish is very close, add only one marker
+    if (
+        abs(track_df["latitude"].iloc[0] - track_df["latitude"].iloc[-1]) < 1e-5
+        or abs(track_df["longitude"].iloc[0] - track_df["longitude"].iloc[-1]) < 1e-5
+    ):  # ~1 meter
+        folium.Marker(
+            (track_df["latitude"].iloc[-1], track_df["longitude"].iloc[-1]),
+            popup="Start/Finish",
+            icon=folium.Icon(color="green", icon="play"),
+        ).add_to(m)
+    else:
+        folium.Marker(
+            (track_df["latitude"].iloc[0], track_df["longitude"].iloc[0]),
+            popup="Start",
+            icon=folium.Icon(color="green", icon="play"),
+        ).add_to(m)
 
-    folium.Marker(
-        (track_df["latitude"].iloc[-1], track_df["longitude"].iloc[-1]),
-        popup="Finish",
-        icon=folium.Icon(color="red"),
-    ).add_to(m)
+        folium.Marker(
+            (track_df["latitude"].iloc[-1], track_df["longitude"].iloc[-1]),
+            popup="Finish",
+            icon=folium.Icon(color="red", icon="stop"),
+        ).add_to(m)
 
     return m

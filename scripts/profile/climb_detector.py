@@ -5,7 +5,17 @@ import pandas as pd
 
 
 class ClimbDetector:
-    """Detect climbs based on length, gain, and slope criteria."""
+    """Detect climbs in elevation profile data.
+
+    Parameters:
+    - min_length_m: Minimum length of a climb in meters.
+    - min_avg_slope: Minimum average slope (%) of a climb.
+    - window_m: Smoothing window size in meters for rolling slope calculation.
+    - merge_gap_m: Maximum gap in meters to merge close climb segments.
+    - base_detection_slope: Base slope (%) threshold to consider as uphill.
+
+    Returns:
+    - DataFrame with detected climbs and their statistics."""
 
     def __init__(self, df: pd.DataFrame) -> None:
         self.df = df.copy()
@@ -16,7 +26,7 @@ class ClimbDetector:
         min_avg_slope: float = 2.0,
         window_m: float = 200,
         merge_gap_m: float = 100,
-        base_detection_slope: float = 2.0,
+        base_detection_slope: float = 2.0,  # minimal slope to consider as uphill
     ) -> pd.DataFrame:
         df = self.df.dropna(subset=["km", "elev_smooth"]).copy()
         if df.empty:
@@ -34,7 +44,7 @@ class ClimbDetector:
         df["rolling_slope"] = (df["rolling_gain"] / df["rolling_dist"]) * 100
         df["rolling_slope"] = df["rolling_slope"].fillna(0)
 
-        is_uphill = df["rolling_slope"] > (base_detection_slope / 2.0)
+        is_uphill = df["rolling_slope"] > base_detection_slope  # / 2.0
         regions: list[tuple[int, int]] = []
         start_idx: Optional[int] = None
         for i, up in enumerate(is_uphill):

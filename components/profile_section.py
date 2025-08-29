@@ -51,14 +51,18 @@ def render_segment_profile(
         with col5:
             st.metric("AVG slope:", f"{segment_stats['AVG slope (%)']:.2f} %")
 
-        if segment_stats["distance_km"] < 25:
-            background_shift_km = 0.2
+        if segment_stats["distance_km"] < 10:
+            background_shift_km = 0.05
+            background_shift_elev = 2
+
+        elif segment_stats["distance_km"] < 25:
+            background_shift_km = 0.15
             background_shift_elev = 5
         elif segment_stats["distance_km"] < 100:
-            background_shift_km = 0.4
+            background_shift_km = 0.3
             background_shift_elev = 10
         else:
-            background_shift_km = 0.5
+            background_shift_km = 0.45
             background_shift_elev = 15
 
         fig_s, _ = segment_profile.plot_profile(
