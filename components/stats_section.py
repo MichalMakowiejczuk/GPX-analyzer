@@ -37,4 +37,4 @@ def render_main_stats_and_map(stats, base_map) -> None:
             )
 
         map_html = base_map.get_root().render()
-        components.html(map_html, height=550)
+        components.html(map_html, height=550, width=2000)

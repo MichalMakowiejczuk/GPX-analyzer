@@ -6,6 +6,7 @@ import plotly.express as px
 import streamlit as st
 
 from scripts.profile import ElevationProfile
+from services.plot_service import plot_elevation_profile
 
 
 def render_segment_profile(
@@ -51,28 +52,29 @@ def render_segment_profile(
         with col5:
             st.metric("AVG slope:", f"{segment_stats['AVG slope (%)']:.2f} %")
 
-        if segment_stats["distance_km"] < 10:
-            background_shift_km = 0.05
-            background_shift_elev = 2
+        fig = plot_elevation_profile(segment_profile, slope_thresholds)
 
-        elif segment_stats["distance_km"] < 25:
-            background_shift_km = 0.15
-            background_shift_elev = 5
-        elif segment_stats["distance_km"] < 100:
-            background_shift_km = 0.3
-            background_shift_elev = 10
-        else:
-            background_shift_km = 0.45
-            background_shift_elev = 15
+        # if segment_stats["distance_km"] < 10:
+        #     background_shift_km = 0.05
+        #     background_shift_elev = 2
+        # elif segment_stats["distance_km"] < 25:
+        #     background_shift_km = 0.15
+        #     background_shift_elev = 5
+        # elif segment_stats["distance_km"] < 100:
+        #     background_shift_km = 0.3
+        #     background_shift_elev = 10
+        # else:
+        #     background_shift_km = 0.45
+        #     background_shift_elev = 15
 
-        fig_s, _ = segment_profile.plot_profile(
-            show_labels=False,
-            show_background=True,
-            slope_thresholds=slope_thresholds,
-            slope_type="segment",
-            background_shift_km=background_shift_km,
-            background_shift_elev=background_shift_elev,
-        )
+        # fig_s, _ = segment_profile.plot_profile(
+        #     show_labels=False,
+        #     show_background=True,
+        #     slope_thresholds=slope_thresholds,
+        #     slope_type="segment",
+        #     background_shift_km=background_shift_km,
+        #     background_shift_elev=background_shift_elev,
+        # )
 
         # set y-axis limits with some margin
         elev_min = segment_df["elevation"].min()
@@ -80,46 +82,14 @@ def render_segment_profile(
         elev_margin = (elev_max - elev_min) * 0.1
         plt.ylim(elev_min - elev_margin, elev_max + elev_margin)
 
-        st.pyplot(fig_s, use_container_width=True)
-        plt.close(fig_s)
+        st.pyplot(fig, use_container_width=True)
+        plt.close(fig)
 
 
-def render_slope_table(profile: ElevationProfile, slope_thresholds: Tuple) -> None:
-    slope_df = profile.compute_slope_lengths(slope_thresholds=slope_thresholds)
-
-    slope_df = slope_df.rename(
-        columns={
-            "slope_range": "Slope Range",
-            "length_km": "Length (km)",
-        }
-    )
-
-    uphill_downhill = profile.compute_slope_lengths(slope_thresholds=(-2, 2))
-    uphill_downhill.loc[:, "slope_range"] = [
-        "Downhill (< -2%)",
-        "Flat",
-        "Uphill (> 2%)",
-    ]
-
-    fig = px.pie(
-        names=uphill_downhill["slope_range"],
-        values=uphill_downhill["length_km"],
-        width=300,
-        height=300,
-    )
-    fig.update_traces(
-        textinfo="label+percent",
-        textfont_size=15,
-        showlegend=False,
-        marker=dict(
-            colors=["#02BCF5", "lightgreen", "orangered"],
-            line=dict(color="#000000", width=2),
-        ),
-    )
-
-    with st.expander("Table of lengths by slope ranges", expanded=False):
-        col1, col2 = st.columns([1, 1])
-        with col1:
-            st.dataframe(slope_df, use_container_width=True, hide_index=True)
-        with col2:
-            st.plotly_chart(fig, use_container_width=True)
+def render_main_profile(
+    profile: ElevationProfile, slope_thresholds: Tuple
+) -> plt.Figure:
+    with st.expander("Main elevation profile", expanded=True):
+        fig = plot_elevation_profile(profile, slope_thresholds)
+        st.pyplot(fig, use_container_width=True)
+        plt.close(fig)

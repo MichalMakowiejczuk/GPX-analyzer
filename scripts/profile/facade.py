@@ -150,6 +150,6 @@ class ElevationProfile:
                 )
                 if total_distance_km > 0
                 else 0.0
-            ),  # uwzględnia zjazdy
+            ),  # including descent as negative
         }
         return {**stats, **gpx_quality}
