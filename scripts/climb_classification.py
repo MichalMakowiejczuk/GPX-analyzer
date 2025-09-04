@@ -1,4 +1,4 @@
-def classify_climb_difficulty(dl_km, gradient):
+def classify_climb_difficulty(length_km, gradient):
     """Calculates the difficulty score of a climb based on its length and gradient (just like strava: https://support.strava.com/hc/en-us/articles/216917057-Climb-Categorization).
     Args:
         dl_km (float): Length of the climb in meters.
@@ -6,7 +6,7 @@ def classify_climb_difficulty(dl_km, gradient):
     Returns:
         tuple: A tuple containing the category as a string and the score as a float.
     """
-    score = dl_km * (gradient)
+    score = length_km * (gradient)
 
     if score < 8000:
         category = "Very easy (Cat <4)"

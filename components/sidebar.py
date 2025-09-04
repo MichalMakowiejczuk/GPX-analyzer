@@ -2,6 +2,11 @@ import os
 
 import streamlit as st
 
+from services.validate_thresholds_service import (
+    DEFAULT_THRESHOLDS,
+    validate_slope_thresholds,
+)
+
 
 def parse_thresholds(threshold_str: str) -> tuple[float, ...]:
     try:
@@ -17,7 +22,6 @@ def render_sidebar() -> tuple:
     st.sidebar.header("Settings")
     uploaded_file = st.sidebar.file_uploader("Upload GPX file:", type="gpx")
 
-    # Pliki przykładowe
     data_dir = "sample_data"
     example_files = (
         [f for f in os.listdir(data_dir) if f.endswith(".gpx")]
@@ -52,11 +56,16 @@ def render_sidebar() -> tuple:
         step=2,
     )
 
-    st.sidebar.subheader("Slope ranges for profile coloring")
+    st.sidebar.subheader("Slope ranges for profile coloring and slope table")
     slope_thresholds_str = st.sidebar.text_input(
         "Thresholds (in %), separated by commas", value="2,4,6,8"
     )
-    slope_thresholds = parse_thresholds(slope_thresholds_str)
+    slope_thresholds = validate_slope_thresholds(slope_thresholds_str)
+
+    if slope_thresholds != tuple(
+        float(x) for x in slope_thresholds_str.split(",") if x.strip() != ""
+    ):
+        st.sidebar.warning(f"Invalid thresholds, using default: {DEFAULT_THRESHOLDS}")
 
     return (
         uploaded_file,

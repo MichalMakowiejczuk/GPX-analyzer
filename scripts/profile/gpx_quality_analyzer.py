@@ -14,7 +14,6 @@ class GpxQualityAnalyzer:
                 "num_points": num_points,
                 "avg_spacing_m": 0.0,
                 "median_spacing_m": 0.0,
-                "quality": "insufficient data",
             }
 
         delta_m = self.df["km"].diff().dropna() * 1000.0

@@ -49,7 +49,7 @@ class SlopeAnalyzer:
         )
 
         result = (
-            df.groupby("slope_range")["delta_km"]
+            df.groupby("slope_range", observed=True)["delta_km"]
             .sum()
             .reset_index()
             .rename(columns={"delta_km": "length_km"})

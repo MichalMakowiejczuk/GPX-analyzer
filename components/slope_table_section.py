@@ -45,6 +45,7 @@ def render_slope_table_and_plot(
     with st.expander("Table of lengths by slope ranges", expanded=False):
         col1, col2 = st.columns([1, 1])
         with col1:
+            st.write("Slope range is based on settings in the sidebar.")
             st.dataframe(slope_df, use_container_width=True, hide_index=True)
         with col2:
             st.plotly_chart(fig, use_container_width=True)

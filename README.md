@@ -66,7 +66,7 @@ streamlit run app.py
 ## Project structure
 
 ```bash
-climbanalyzer/
+GPX-analyzer/
 │── app.py                  # main app file (Streamlit)
 │── components/             # UI modules (sidebar, profile, stats)
 │── services/               # application logic
