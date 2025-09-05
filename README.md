@@ -86,6 +86,7 @@ GPX-analyzer/
 
 ![GPX analyzer - demo gif](gifs/GPX-analyzer-demo.gif)
 
+Try it online on Streamlit Cloud: [Launch GPX Profile Analyzer](https://gpxanalyzer.streamlit.app)
 
 ---
 
