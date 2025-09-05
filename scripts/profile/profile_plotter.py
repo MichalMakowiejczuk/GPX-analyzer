@@ -64,14 +64,31 @@ class ProfilePlotter:
                 mask = (self.df["datapoint_slope"] >= thresholds[i]) & (
                     self.df["datapoint_slope"] < thresholds[i + 1]
                 )
-            ax.fill_between(
-                self.df["km"],
-                self.df["elev_smooth"],
-                where=mask,
-                color=color,
-                zorder=1,
-                interpolate=True,
-            )
+
+            # znajdź spójne fragmenty maski
+            in_block = False
+            start_idx = None
+            for j in range(len(mask)):
+                if mask.iloc[j] and not in_block:
+                    in_block = True
+                    start_idx = j
+                elif not mask.iloc[j] and in_block:
+                    # koniec bloku -> rysujemy
+                    ax.fill_between(
+                        self.df["km"].iloc[start_idx : j + 1],
+                        self.df["elev_smooth"].iloc[start_idx : j + 1],
+                        color=color,
+                        zorder=1,
+                    )
+                    in_block = False
+            # domknij ostatni fragment
+            if in_block:
+                ax.fill_between(
+                    self.df["km"].iloc[start_idx:],
+                    self.df["elev_smooth"].iloc[start_idx:],
+                    color=color,
+                    zorder=1,
+                )
             legend.append(mpatches.Patch(color=color, label=slope_labels[i]))
 
         if show_labels and places_df is not None and not places_df.empty:

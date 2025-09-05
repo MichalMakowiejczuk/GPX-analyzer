@@ -30,7 +30,7 @@ def main() -> None:
         st.stop()
 
     # Load and process GPX data
-    track_df, profile = load_gpx(uploaded_file, smooth_window)
+    track_df, profile = load_gpx(uploaded_file, smooth_window, seg_unit_km=0.25)
     stats = compute_route_stats(profile)
 
     # Climb detection

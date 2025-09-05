@@ -8,16 +8,6 @@ from services.validate_thresholds_service import (
 )
 
 
-def parse_thresholds(threshold_str: str) -> tuple[float, ...]:
-    try:
-        return tuple(
-            float(x.strip()) for x in threshold_str.split(",") if x.strip() != ""
-        )
-    except:
-        st.warning("Incorrect threshold format - I'm using the default ones: 2,4,6,8")
-        return (2, 4, 6, 8)
-
-
 def render_sidebar() -> tuple:
     st.sidebar.header("Settings")
     uploaded_file = st.sidebar.file_uploader("Upload GPX file:", type="gpx")

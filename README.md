@@ -10,7 +10,7 @@ The project was created as a hobby side-project.
 
 The idea behind **GPX profile analyzer** came from my own cycling experience.  
 While using Garmin Connect, I often felt that some useful features were missing – especially around climb detection and route profile analysis.  
-This project was created to extend those capabilities by providing automatic climb detection, detailed elevation statistics, and an interactive dashboard for route exploration.
+This project was created to extend those capabilities by providing automatic climb detection with custom settings, detailed elevation statistics, and an interactive dashboard for route exploration.
 
 ---
 
@@ -84,6 +84,7 @@ GPX-analyzer/
 
 ## Demo
 
+![GPX analyzer - demo gif](gifs/GPX-analyzer-demo.gif)
 
 
 ---
@@ -91,6 +92,5 @@ GPX-analyzer/
 ## Roadmap
 
 - Export results to CSV/Excel
-- Descent detection
 - Speed calculator
 

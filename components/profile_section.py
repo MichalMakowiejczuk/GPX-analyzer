@@ -39,8 +39,10 @@ def render_segment_profile(
             st.info("Too few points for a meaningful graph.")
             return
 
+        segment_df["km"] = segment_df["km"] - segment_df["km"].min()
+
         segment_profile = ElevationProfile(
-            segment_df, seg_unit_km=0.5, smooth_window=smooth_window
+            segment_df, seg_unit_km=0.25, smooth_window=smooth_window
         )
         segment_stats = segment_profile.summary()
         with col2:
