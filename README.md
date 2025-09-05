@@ -93,4 +93,5 @@ GPX-analyzer/
 
 - Export results to CSV/Excel
 - Speed calculator
+- Further optimization possible - climb detection algorithm.
 
